@@ -77,7 +77,6 @@ impl View {
 
         extern fn accessibility_attribute_value(this: &Object, _: Sel, attribute: id) -> id {
             unsafe {
-                info!("{:?}", CStr::from_ptr(attribute.UTF8String()));
                 if attribute.isEqualToString("AXChildren") {
                     let state: *mut libc::c_void = *this.get_ivar("glutinState");
                     let state = state as *mut ViewState;
