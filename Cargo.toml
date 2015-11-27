@@ -44,7 +44,7 @@ objc = "0.1.8"
 [target.x86_64-apple-darwin.dependencies]
 objc = "0.1.8"
 cgl = "0.1"
-cocoa = {git = "https://github.com/servo/cocoa-rs.git", branch = "strings-arrays-and-values-oh-my"}
+cocoa = {git = "https://github.com/servo/cocoa-rs.git"}
 core-foundation = "0"
 core-graphics = "0"
 
