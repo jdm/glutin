@@ -20,6 +20,7 @@ use native_monitor::NativeMonitorId;
 
 use libc;
 use platform;
+use platform::AccessibleRef;
 
 /// Object that allows you to build windows.
 pub struct WindowBuilder<'a> {
@@ -190,6 +191,11 @@ impl<'a> WindowBuilder<'a> {
     #[inline]
     pub fn with_multitouch(mut self) -> WindowBuilder<'a> {
         self.window.multitouch = true;
+        self
+    }
+
+    pub fn with_accessibility(mut self, root: AccessibleRef) -> WindowBuilder<'a> {
+        self.window.root_accessible = Some(root);
         self
     }
 

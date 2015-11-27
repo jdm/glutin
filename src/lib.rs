@@ -556,6 +556,8 @@ pub struct WindowAttributes {
     /// [iOS only] Enable multitouch, see [UIView#multipleTouchEnabled]
     /// (https://developer.apple.com/library/ios/documentation/UIKit/Reference/UIView_Class/#//apple_ref/occ/instp/UIView/multipleTouchEnabled)
     pub multitouch: bool,
+
+    pub root_accessible: Option<platform::AccessibleRef>,
 }
 
 impl Default for WindowAttributes {
@@ -569,6 +571,7 @@ impl Default for WindowAttributes {
             transparent: false,
             decorations: true,
             multitouch: false,
+            root_accessible: None,
         }
     }
 }

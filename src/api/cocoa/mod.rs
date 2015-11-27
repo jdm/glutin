@@ -24,7 +24,7 @@ use cgl::{CGLEnable, kCGLCECrashOnRemovedFunctions, CGLSetParameter, kCGLCPSurfa
 
 use cocoa::base::{id, nil};
 use cocoa::foundation::{NSAutoreleasePool, NSDate, NSDefaultRunLoopMode, NSPoint, NSRect, NSSize, 
-                        NSString, NSUInteger}; 
+                        NSString, NSUInteger, NSArray};
 use cocoa::appkit;
 use cocoa::appkit::*;
 use cocoa::appkit::NSEventSubtype::*;
@@ -39,7 +39,7 @@ use std::ffi::CStr;
 use std::collections::VecDeque;
 use std::str::FromStr;
 use std::str::from_utf8;
-use std::sync::Mutex;
+use std::sync::{Once, ONCE_INIT, Mutex};
 use std::ascii::AsciiExt;
 use std::ops::Deref;
 
@@ -59,6 +59,69 @@ static mut ctrl_pressed: bool = false;
 static mut win_pressed: bool = false;
 static mut alt_pressed: bool = false;
 
+pub type AccessibleRef = id;
+
+struct ViewState {
+    root_accessible: IdRef,
+}
+
+struct View;
+
+impl View {
+    fn class() -> *const Class {
+        extern fn accessibility_attribute_names(this: &Object, _: Sel) -> id {
+            unsafe {
+                msg_send![super(this, Class::get("NSView").unwrap()), accessibilityAttributeNames]
+            }
+        }
+
+        extern fn accessibility_attribute_value(this: &Object, _: Sel, attribute: id) -> id {
+            unsafe {
+                info!("{:?}", CStr::from_ptr(attribute.UTF8String()));
+                if attribute.isEqualToString("AXChildren") {
+                    let state: *mut libc::c_void = *this.get_ivar("glutinState");
+                    let state = state as *mut ViewState;
+                    NSArray::arrayWithObject(nil, (*state).root_accessible.clone().0)
+                } else {
+                    msg_send![super(this, Class::get("NSView").unwrap()),
+                              accessibilityAttributeValue:attribute]
+                }
+            }
+        }
+
+        static mut view_class: *const Class = 0 as *const Class;
+        static INIT: Once = ONCE_INIT;
+
+        INIT.call_once(|| unsafe {
+            // Create new NSView
+            let superclass = Class::get("NSView").unwrap();
+            let mut decl = ClassDecl::new(superclass, "GlutinView").unwrap();
+
+            decl.add_method(sel!(accessibilityAttributeNames),
+                accessibility_attribute_names as extern fn(&Object, Sel) -> id);
+            decl.add_method(sel!(accessibilityAttributeValue:),
+                accessibility_attribute_value as extern fn(&Object, Sel, id) -> id);
+
+            decl.add_ivar::<*mut libc::c_void>("glutinState");
+
+            view_class = decl.register();
+        });
+
+        unsafe {
+            view_class
+        }
+    }
+
+    fn new(state: ViewState) -> IdRef {
+        unsafe {
+            let state = Box::new(state);
+            let view = IdRef::new(msg_send![View::class(), new]);
+            (&mut **view).set_ivar("glutinState", Box::into_raw(state) as *mut libc::c_void);
+            view
+        }
+    }
+}
+
 struct DelegateState {
     context: IdRef,
     view: IdRef,
@@ -77,8 +140,6 @@ struct WindowDelegate {
 impl WindowDelegate {
     /// Get the delegate class, initiailizing it neccessary
     fn class() -> *const Class {
-        use std::sync::{Once, ONCE_INIT};
-
         extern fn window_should_close(this: &Object, _: Sel, _: id) -> BOOL {
             unsafe {
                 let state: *mut libc::c_void = *this.get_ivar("glutinState");
@@ -280,12 +341,13 @@ impl Window {
             None      => { return Err(OsError(format!("Couldn't create NSApplication"))); },
         };
 
+        let root_accessible = win_attribs.root_accessible;
         let window = match Window::create_window(win_attribs)
         {
             Some(window) => window,
             None         => { return Err(OsError(format!("Couldn't create NSWindow"))); },
         };
-        let view = match Window::create_view(*window) {
+        let view = match Window::create_view(*window, root_accessible) {
             Some(view) => view,
             None       => { return Err(OsError(format!("Couldn't create NSView"))); },
         };
@@ -439,14 +501,17 @@ impl Window {
         }
     }
 
-    fn create_view(window: id) -> Option<IdRef> {
+
+    fn create_view(window: id, root_accessible: Option<id>) -> Option<IdRef> {
         unsafe {
-            let view = IdRef::new(NSView::alloc(nil).init());
-            view.non_nil().map(|view| {
-                view.setWantsBestResolutionOpenGLSurface_(YES);
-                window.setContentView_(*view);
-                view
-            })
+            let root_accessible = root_accessible.unwrap_or(nil);
+            let view_state = ViewState {
+                root_accessible: IdRef::new(root_accessible)
+            };
+            let view = View::new(view_state);
+            view.setWantsBestResolutionOpenGLSurface_(YES);
+            window.setContentView_(*view);
+            Some(view)
         }
     }
 
@@ -676,7 +741,7 @@ impl Window {
 
     #[inline]
     pub fn platform_window(&self) -> *mut libc::c_void {
-        unimplemented!()
+        self.window.0 as *mut libc::c_void
     }
 
     #[inline]
