@@ -14,6 +14,8 @@ pub use self::api_dispatch::{Window, WindowProxy, MonitorId, get_available_monit
 pub use self::api_dispatch::{WaitEventsIterator, PollEventsIterator};
 mod api_dispatch;
 
+pub type AccessibleRef = usize;
+
 pub struct HeadlessContext(OsMesaContext);
 
 impl HeadlessContext {
